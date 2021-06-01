@@ -105,3 +105,34 @@ def read_text(data_path, list_of_books):
         text = docx2txt.process(file_path)
     return text
 
+def clean_texts(text):
+    #Clean the text for further process, i.e. training
+    text = re.sub(r'\n', ' ', text)
+    text = re.sub(r'\?', ' ', text)
+    text = re.sub(r'\!', ' ', text)
+    text = re.sub(r'[{}@_*>()\\#%=+\[\]]','', text)
+    text = re.sub('\.','. ', text)
+    text = re.sub(' +',' ', text)
+    return text
+
+def add_spelling_error(token, error_rate):
+    #What to do with the token when countering spelling error
+    assert(0. <= error_rate < 1.)
+    if len(token)<3:
+        return token
+    rand = np.random.rand()
+    random_char = np.random.randint(len(token)) # From first to third quadran
+    probability = error_rate / 4. # From paper, in which 4 different spelling errpr could occur
+    if rand<probability:
+        token = token[:random_char] + np.random.choice(CHARS) + token[random_char + 1:] #tokenize it
+    elif probability < rand < probability * 2:
+        token = token[:random_char] + token[random_char + 1:]
+    elif probability * 2 < rand < probability * 3:
+        token = token[:random_char] + np.random.choice(CHARS) + token[random_char:]
+    elif probability * 3 < rand < probability * 4:
+        random_char_last = np.random.randint(len(token) - 1)
+        token = token[:random_char_last]  + token[random_char_last + 1] + token[random_char_last] + token[random_char_last + 2:]
+    else:
+        pass
+    return token
+
