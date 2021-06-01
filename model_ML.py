@@ -88,7 +88,7 @@ class CharacterTable(object):
         return indices, chars
 
     def sample_multinomial(self, preds, temp=1.0):
-        # Reshaped to 1D array of shape (nb_chars,).
+        # Reshaped to 1D array of shape
         preds_reshape = np.reshape(preds, len(self.chars)).astype(np.float64)
         index = np.argmax(np.random.multinomial(1, (np.exp(np.log(preds_reshape) / temp) / np.sum(np.exp(np.log(preds_reshape) / temp))), 1))
         char  = self.index2char[index]
@@ -99,20 +99,9 @@ def tokenize(text):
     return tokens
 
 def read_text(data_path, list_of_books):
-    #text = ''
     for book in list_of_books:
         file_path = os.path.join(data_path, book)
         text = docx2txt.process(file_path)
-    return text
-
-def clean_texts(text):
-    #Clean the text for further process, i.e. training
-    text = re.sub(r'\n', ' ', text)
-    text = re.sub(r'\?', ' ', text)
-    text = re.sub(r'\!', ' ', text)
-    text = re.sub(r'[{}@_*>()\\#%=+\[\]]','', text)
-    text = re.sub('\.','. ', text)
-    text = re.sub(' +',' ', text)
     return text
 
 def add_spelling_error(token, error_rate):
