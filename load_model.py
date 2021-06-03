@@ -91,3 +91,46 @@ def add_spelling_errors(token, error_rate):
         pass
     return token
 
+def transform(tokens, maxlen, error_rate=0.2, shuffle=True):
+    """Transform tokens into model inputs and targets.
+    All inputs and targets are padded to maxlen with EOS character.
+    """
+    if shuffle:
+        print('Shuffling data.')
+        np.random.shuffle(tokens)
+    encoder_tokens = []
+    decoder_tokens = []
+    target_tokens = []
+    for token in tokens:
+        encoder = add_spelling_errors(token, error_rate=error_rate)
+        encoder += EOS * (maxlen - len(encoder)) # Padded to maxlen.
+        encoder_tokens.append(encoder)
+    
+        decoder = SOS + token
+        decoder += EOS * (maxlen - len(decoder))
+        decoder_tokens.append(decoder)
+    
+        target = decoder[1:]
+        target += EOS * (maxlen - len(target))
+        target_tokens.append(target)
+        
+        assert(len(encoder) == len(decoder) == len(target))
+    return encoder_tokens, decoder_tokens, target_tokens
+
+def batch(tokens, maxlen, ctable, batch_size=128, reverse=False):
+    """Split data into chunks of `batch_size` examples."""
+    def generate(tokens, reverse):
+        while(True): # This flag yields an infinite generator.
+            for token in tokens:
+                if reverse:
+                    token = token[::-1]
+                yield token
+    
+    token_iterator = generate(tokens, reverse)
+    data_batch = np.zeros((batch_size, maxlen, ctable.size),
+                          dtype=np.float32)
+    while(True):
+        for i in range(batch_size):
+            token = next(token_iterator)
+            data_batch[i] = ctable.encode(token, maxlen)
+        yield data_batch
