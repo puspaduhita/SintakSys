@@ -134,3 +134,66 @@ def batch(tokens, maxlen, ctable, batch_size=128, reverse=False):
             token = next(token_iterator)
             data_batch[i] = ctable.encode(token, maxlen)
         yield data_batch
+
+def decode_sequences(inputs, input_ctable, target_ctable, maxlen, reverse, encoder_model, 
+                     decoder_model, nb_examples, sample_mode='argmax', random=True):
+    """ Doing Inference to the model loaded"""
+    input_tokens = []
+    
+    if random:
+        indices = np.random.randint(0, len(inputs), nb_examples)
+    else:
+        indices = range(nb_examples)
+        
+    for index in indices:
+        input_tokens.append(inputs[index])
+
+    input_sequences = batch(input_tokens, maxlen, input_ctable,
+                            nb_examples, reverse)
+    input_sequences = next(input_sequences)
+       
+    states_value = encoder_model.predict(input_sequences)
+    
+    # Create batch of empty target sequences of length 1 character.
+    target_sequences = np.zeros((nb_examples, 1, target_ctable.size))
+    # Populate the first element of target sequence with the start-of-sequence character.
+    target_sequences[:, 0, target_ctable.char2index[SOS]] = 1.0
+
+    # Sampling loop for a batch of sequences until finding exit condition.
+    decoded_tokens = [''] * nb_examples
+    for _ in range(maxlen):
+        char_probs, h, c = decoder_model.predict([target_sequences] + states_value)
+
+        # Reset the target sequences.
+        target_sequences = np.zeros((nb_examples, 1, target_ctable.size))
+
+        # Sample next character using argmax or multinomial mode.
+        sampled_chars = []
+        for i in range(nb_examples):
+            if sample_mode == 'argmax':
+                next_index, next_char = target_ctable.decode(
+                    char_probs[i], calc_argmax=True)
+            elif sample_mode == 'multinomial':
+                next_index, next_char = target_ctable.sample_multinomial(
+                    char_probs[i], temperature=0.5)
+            else:
+                raise Exception(
+                    "`sample_mode` accepts `argmax` or `multinomial`.")
+            decoded_tokens[i] += next_char
+            sampled_chars.append(next_char) 
+            # Update target sequence with index of next character.
+            target_sequences[i, 0, next_index] = 1.0
+
+        stop_char = set(sampled_chars)
+        if len(stop_char) == 1 and stop_char.pop() == EOS:
+            break
+            
+        # Update states.
+        states_value = [h, c]
+    
+    # Sampling finished.
+    input_tokens   = [re.sub('[%s]' % EOS, '', token)
+                      for token in input_tokens]
+    decoded_tokens = [re.sub('[%s]' % EOS, '', token)
+                      for token in decoded_tokens]
+    return input_tokens, decoded_tokens
