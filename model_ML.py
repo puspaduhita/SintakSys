@@ -141,5 +141,30 @@ def transform(tokens, maxlen, error_rate=0.3, shuffle=True):
         target += EOS * (maxlen - len(target))
         targetTokens.append(target)
         
-        assert(len(encoder) == len(decoder) == len(target))
     return encoder_tokens, decoder_tokens, target_tokens
+
+def datagen(encoder_loop, decoder_loop, target_loop):
+    """Utility function to load data into required model format."""
+    inputs = zip(encoder_loop, decoder_loop)
+    while(True):
+        encoder_input, decoder_input = next(inputs)
+        target = next(target_loop)
+        yield ([encoder_input, decoder_input], target)
+
+def batch(tokens, maxlen, ctable, batch_size=128, reverse=False):
+    """Split data into chunks of `batch_size` examples."""
+    def generate(tokens, reverse):
+        while True:
+            for token in tokens:
+                if reverse:
+                    token = token[::-1]
+                yield token
+            
+    token_iter = generate(tokens, reverse)
+    data_padded = np.zeros((batch_size, maxlen, ctable.size),
+                          dtype=np.float32)
+    while(True):
+        for i in range(batch_size):
+            token = next(token_iter)
+            data_padded[i] = ctable.encode(token, maxlen)
+        yield data_padded
