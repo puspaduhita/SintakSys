@@ -89,11 +89,13 @@ class CharacterTable(object):
         char  = self.index2char[index]
         return index, char
 
-def tokenize(text):
+def tokenize(text): 
+    #function to tokenize the text
     tokens = [re.sub(cleaned_chars, '', token) for token in re.split("[-\n ]", text)]
     return tokens
 
 def read_text(data_path, list_of_books):
+    
     for book in list_of_books:
         file_path = os.path.join(data_path, book)
         text = docx2txt.process(file_path)
@@ -168,3 +170,78 @@ def batch(tokens, maxlen, ctable, batch_size=128, reverse=False):
             token = next(token_iter)
             data_padded[i] = ctable.encode(token, maxlen)
         yield data_padded
+
+def predict(inputs, targets, input_ctable, target_ctable, maxlen, reverse, encoder_model, decoder_model,
+                     len_test, sample_mode='argmax', random=True):
+    """Function to process (predict) the dataset, hence this function will return the decoded tokens 
+    added with input and target tokens for manual comparing purposes"""
+    input_tokens = []
+    target_tokens = []
+    #Sign the index
+    if random:
+        index = np.random.randint(0, len(inputs), len_test)
+    else:
+        index = range(len_test)
+    #Make list for the index    
+    for idx in index:
+        input_tokens.append(inputs[idx])
+        target_tokens.append(targets[idx])
+
+    input_sequences = batch(input_tokens, maxlen, input_ctable, len_test, reverse)
+    states_value = encoder_model.predict(next(input_sequences))
+    
+    target_sequences = np.zeros((len_test, 1, target_ctable.size))
+    target_sequences[:, 0, target_ctable.char2index[SOS]] = 1.0
+
+    decoded_tokens = [''] * len_test
+    for _ in range(maxlen):
+        char_error, h, c = decoder_model.predict([target_sequences] + states_value)
+
+        # Reset the target sequences.
+        target_sequences = np.zeros((len_test, 1, target_ctable.size))
+
+        # Sample next character using argmax or multinomial mode.
+        sampled_chars = []
+        for i in range(len_test):
+            if sample_mode == 'argmax':
+                next_index, next_char = target_ctable.decode(char_error[i], calc_argmax=True)
+            elif sample_mode == 'multinomial':
+                next_index, next_char = target_ctable.sample_multinomial(char_error[i], temperature=0.5)
+
+            decoded_tokens[i] += next_char
+            sampled_chars.append(next_char) 
+            # Update target sequence with index of next character.
+            target_sequences[i, 0, next_index] = 1.0
+
+        stop_char = set(sampled_chars)
+        if len(stop_char) == 1 and stop_char.pop() == EOS:
+            break
+            
+        # Update states.
+        states_value = [h, c]
+    
+    # Sampling finished.
+    input_tokens   = [re.sub('[%s]' % EOS, '', token) for token in input_tokens]
+    decoded_tokens = [re.sub('[%s]' % EOS, '', token) for token in decoded_tokens]
+    target_tokens  = [re.sub('[%s]' % EOS, '', token) for token in target_tokens]
+    return input_tokens, target_tokens, decoded_tokens
+
+
+def restore_model(path_to_full_model, hidden_size):
+    """Restore model to reconstruct the encoder and decoder."""
+    model = load_model(path_to_full_model)
+    # Using 2 LSTM
+    encoder_lstm1 = model.get_layer('encoder_lstm_1')
+    encoder_lstm2 = model.get_layer('encoder_lstm_2')
+    
+    encoder_outputs = encoder_lstm1(model.input[0])
+    _, state_h, state_c = encoder_lstm2(encoder_outputs)
+    encoder_model = Model(inputs=model.input[0], outputs=[state_h, state_c])
+
+    decoder_lstm = model.get_layer('decoder_lstm')
+    decoder_outputs, state_h, state_c = decoder_lstm(model.input[1], initial_state=decoder_states_inputs)
+    decoder_softmax = model.get_layer('decoder_softmax')
+    decoder_outputs = decoder_softmax(decoder_outputs)
+    decoder_model = Model(inputs=[model.input[1]] + [Input(shape=(hidden_size,)), Input(shape=(hidden_size,))],
+                          outputs=[decoder_outputs] + [state_h, state_c])
+    return encoder_model, decoder_model
