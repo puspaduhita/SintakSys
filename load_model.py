@@ -197,3 +197,29 @@ def decode_sequences(inputs, input_ctable, target_ctable, maxlen, reverse, encod
     decoded_tokens = [re.sub('[%s]' % EOS, '', token)
                       for token in decoded_tokens]
     return input_tokens, decoded_tokens
+
+def restore_model(path_to_full_model, hidden_size):
+    """Restore model to construct the encoder and decoder."""
+    model = load_model(path_to_full_model)
+    encoder_inputs = model.input[0] # encoder_data
+    encoder_lstm1 = model.get_layer('encoder_lstm_1')
+    encoder_lstm2 = model.get_layer('encoder_lstm_2')
+    
+    encoder_outputs = encoder_lstm1(encoder_inputs)
+    _, state_h, state_c = encoder_lstm2(encoder_outputs)
+    encoder_states = [state_h, state_c]
+    encoder_model = Model(inputs=encoder_inputs, outputs=encoder_states)
+
+    decoder_inputs = model.input[1] # decoder_data
+    decoder_state_input_h = Input(shape=(hidden_size,))
+    decoder_state_input_c = Input(shape=(hidden_size,))
+    decoder_states_inputs = [decoder_state_input_h, decoder_state_input_c]
+    decoder_lstm = model.get_layer('decoder_lstm')
+    decoder_outputs, state_h, state_c = decoder_lstm(
+        decoder_inputs, initial_state=decoder_states_inputs)
+    decoder_states = [state_h, state_c]
+    decoder_softmax = model.get_layer('decoder_softmax')
+    decoder_outputs = decoder_softmax(decoder_outputs)
+    decoder_model = Model(inputs=[decoder_inputs] + decoder_states_inputs,
+                          outputs=[decoder_outputs] + decoder_states)
+    return encoder_model, decoder_model
