@@ -143,7 +143,7 @@ def transform(tokens, maxlen, error_rate=0.3, shuffle=True):
         
     return encoder_tokens, decoder_tokens, target_tokens
 
-def datagen(encoder_loop, decoder_loop, target_loop):
+def load_data(encoder_loop, decoder_loop, target_loop):
     """Utility function to load data into required model format."""
     inputs = zip(encoder_loop, decoder_loop)
     while(True):
