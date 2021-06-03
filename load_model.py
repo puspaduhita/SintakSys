@@ -50,3 +50,44 @@ class CharacterTable(object):
         index = np.argmax(probs)
         char  = self.index2char[index]
         return index, char
+
+def read_text(data_path, list_of_books):
+    """Prepocessing the Data(.docx to .txt)"""
+    for book in list_of_books:
+        file_path = os.path.join(data_path, book)
+        text = docx2txt.process(file_path)
+    return text
+
+def tokenize(text):
+    """Assign token to the texts"""
+    tokens = [re.sub(REMOVE_CHARS, '', token) for token in re.split("[-\n ]", text)]
+    return tokens
+
+def add_spelling_errors(token, error_rate):
+    """Simulate some spelling error"""
+    assert(0.0 <= error_rate < 1.0)
+    if len(token) < 3:
+        return token
+    rand = np.random.rand()
+    prob = error_rate / 4.0 # With 4 cause of error
+    if rand < prob:
+        # Replace a character with a random character.
+        random_char_index = np.random.randint(len(token))
+        token = token[:random_char_index] + np.random.choice(CHARS) + token[random_char_index + 1:]
+    elif prob < rand < prob * 2:
+        # Delete a character.
+        random_char_index = np.random.randint(len(token))
+        token = token[:random_char_index] + token[random_char_index + 1:]
+    elif prob * 2 < rand < prob * 3:
+        # Add a random character.
+        random_char_index = np.random.randint(len(token))
+        token = token[:random_char_index] + np.random.choice(CHARS) + token[random_char_index:]
+    elif prob * 3 < rand < prob * 4:
+        # Transpose 2 characters.
+        random_char_index = np.random.randint(len(token) - 1)
+        token = token[:random_char_index]  + token[random_char_index + 1] + token[random_char_index] + token[random_char_index + 2:]
+    else:
+        # No spelling errors.
+        pass
+    return token
+
